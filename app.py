@@ -123,28 +123,26 @@ def search_local_items(query: str):
             })
     return results
 
-# 2단계: 데이터에 없는 품목은 Gemini AI로 분류
+# 2단계: 데이터에 없는 품목은 Gemini AI로 분류 (요청하신 형식 적용)
 def search_with_ai(query: str):
     client = get_gemini_client()
     if not client:
         return None, "Streamlit Secrets에 `GEMINI_API_KEY`가 설정되지 않았습니다."
 
-    prompt = f"""
-    대한민국 환경부 분리배출 가이드라인을 기준으로 다음 쓰레기 품목의 배출 방법을 알려줘.
-    입력 품목: "{query}"
-
-    반드시 아래 JSON 형식으로만 응답해:
-    {{
-        "name": "정확한 품목명",
-        "material": "주요 재질 (예: PET, PP, 종이, 유리, 복합재질 등)",
-        "waste_type": "분리배출 분류 (예: 플라스틱, 비닐류, 일반쓰레기(종량제), 음식물쓰레기, 전용수거함 등)",
-        "method": "구체적인 분리배출 방법을 한두 문장으로 명확하게 설명"
-    }}
-    """
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
+            model="gemini-3.1-flash-lite",
+            contents=[
+                "대한민국 환경부 분리배출 가이드라인을 기준으로 다음 쓰레기 품목의 배출 방법을 알려줘.",
+                f"입력 품목: {query}",
+                """반드시 아래 JSON 형식으로만 응답해:
+                {
+                    "name": "정확한 품목명",
+                    "material": "주요 재질 (예: PET, PP, 종이, 유리, 복합재질 등)",
+                    "waste_type": "분리배출 분류 (예: 플라스틱, 비닐류, 일반쓰레기(종량제), 음식물쓰레기, 전용수거함 등)",
+                    "method": "구체적인 분리배출 방법을 한두 문장으로 명확하게 설명"
+                }"""
+            ],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 temperature=0.2
@@ -163,7 +161,7 @@ if "search_query" not in st.session_state:
 def set_query(item_name):
     st.session_state.search_query = item_name
 
-# ================= UI 레이아웃 구성 (스케치 반영) =================
+# ================= UI 레이아웃 구성 =================
 left_col, right_col = st.columns([1.2, 1], gap="large")
 
 # [좌측 영역]: 제목 + 검색창 + 결과창
@@ -171,7 +169,6 @@ with left_col:
     st.markdown("# ♻️ 쓰싹쓰싹")
     st.caption("어떤 쓰레기든 입력하면 분리배출 방법을 알려드립니다.")
 
-    # 검색 입력창
     query = st.text_input(
         "분리배출 종류 입력",
         value=st.session_state.search_query,
@@ -181,7 +178,6 @@ with left_col:
 
     st.markdown("---")
 
-    # 결과 출력 영역
     if query.strip():
         local_results = search_local_items(query)
 
@@ -193,7 +189,6 @@ with left_col:
                     st.write(f"**주요 재질:** {item['material']}")
                     st.write(f"**배출 방법:** {item['method']}")
         else:
-            # 로컬 데이터에 없으면 AI 호출
             with st.spinner(f"AI가 '{query}'의 분리배출 방법을 분석하고 있습니다..."):
                 ai_result, error_msg = search_with_ai(query)
 
@@ -214,7 +209,7 @@ with left_col:
                 unsafe_allow_html=True
             )
 
-# [우측 영역]: 제미나이 마음대로 (4대 원칙 + 빠른 품목 선택 버튼)
+# [우측 영역]: 4대 원칙 + 빠른 품목 선택 버튼
 with right_col:
     with st.container(border=True):
         st.subheader("🌱 올바른 분리배출 4대 원칙")
@@ -229,7 +224,6 @@ with right_col:
         st.subheader("📦 기본 등록 품목 빠른 보기")
         st.caption("버튼을 누르면 좌측에서 바로 배출 방법을 확인할 수 있습니다.")
         
-        # 3열 버튼 그리드 생성
         item_keys = list(ITEMS.keys())
         btn_cols = st.columns(3)
         for idx, key in enumerate(item_keys):
